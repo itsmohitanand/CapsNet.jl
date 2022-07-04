@@ -1,7 +1,7 @@
 using Flux, MLDatasets
 using CairoMakie
 using Flux.Data: DataLoader
-using Flux: @functor
+using Flux: @functor, params
 using Parameters: @with_kw
 using LinearAlgebra: mul!, norm
 using Flux:onehot
@@ -25,7 +25,7 @@ include("io.jl")
     n_digit_capsule = 10
     primary_capsule_vector = 8
     digit_capsule_vector = 16
-    batch_size = 64 
+    batch_size = 2 
 end
 
 
@@ -68,9 +68,6 @@ function (digit_caps::DigitCapsule)(x::AbstractArray)
     size_x = size(x)
     u = reshape(x, (size_x[1]*size_x[2]*32,8,1, :))
     u_hat = ones(1152, 16, 1, 10, 100)
-    print(size(u))
-    print(size(u_hat))
-    print(size(digit_caps.W))
 
     u_hat = capsmul!(u_hat, digit_caps.W, u)
     
@@ -129,30 +126,25 @@ reconstruction = Reconstruction()
 
 opt = ADAM()
 
-x = Float32.(ones(28, 28, 1, 100))
-y = Float32.(ones(10, 100))
-
-out_1 = primary_caps(x)
-u_hat = digit_caps(out_1)
-
-v = dynamic_routing(u_hat)
-
-re_image = reconstruction(v, y)
-
-print(size(v))
-print(size(re_image))
-
-ps = Flux.params(primary_caps.conv1, primary_caps.conv2)
+ps = Flux.params(primary_caps, digit_caps, reconstruction)
 
 train_steps = 0
 
-for a in train_loader
-    print(a)
-
+for epoch=1:2 #args.epochs
+    for (x, y) in train_loader
+        loss, grad = Flux.withgradient(ps) do
+        
+            out_1 = primary_caps(x)
+            u_hat = digit_caps(out_1)
+            v = dynamic_routing(u_hat)
+            re_image = reconstruction(v, y)
+            loss_function(v, re_image, y, x)
+        end
+        print("Training step $train_steps")
+        Flux.Optimise.update!(opt, ps, grad)
+        train_steps+=1
+        print(train_steps)
+    end
+    print("$epochs")
 end
-
-for (x, y) in train_loader
-    print(size(y))
-    break
-end
-
+   

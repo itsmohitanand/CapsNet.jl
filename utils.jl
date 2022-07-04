@@ -1,4 +1,5 @@
 using Flux:onehot
+using StatsBase
 
 function expand_dims(X, which_dim::Int)
     s = [size(X)...]
@@ -33,10 +34,21 @@ end
 
 function safe_norm(v)
     ϵ = 1e-7
-    sq_norm = squared_norm(v, 1)
-    return sqrt(sq_norm+ϵ)
+    sq_norm = squared_norm(v, 1)[1, :, :]
+    return sqrt.(sq_norm.+ϵ)
 end
 
 function loss_function(v, reconstructed_img, y, img)
+    prediction  = safe_norm(v)
+    
+    left_margin = abs2.(max.(0.0, 0.9.-prediction))
+    right_margin = abs2.(max.(0.0, prediction .- 0.1))
 
+    l = y.*left_margin .+ 0.5.* (1.0.-y).*right_margin
+
+    margin_loss = mean(sum(l, dims= 1))
+    
+    reconstruction_loss = mean(abs2, img[:,:,1,:] .- reconstructed_img)
+
+    margin_loss + 0.0005*reconstruction_loss
 end
